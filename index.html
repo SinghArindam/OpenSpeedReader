@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SpeedReader Pro | Amoled Edition</title>
+    
+    <!-- Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- PDF & EPUB Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        amoled: '#000000',
+                        'amoled-surface': '#0a0a0a',
+                        'amoled-border': '#222222',
+                        accent: '#ff3b30' // Red for focus point
+                    },
+                    fontFamily: {
+                        mono: ['"Courier New"', 'Courier', 'monospace'],
+                        sans: ['system-ui', '-apple-system', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Reader Alignment Logic */
+        .reader-stage {
+            position: relative;
+            display: flex;
+            align-items: center;
+            height: 120px;
+            font-family: 'Courier New', Courier, monospace; /* Monospace is critical for fixed width calculation */
+            font-size: 3rem;
+            white-space: pre;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* The Focus Marker (Vertical Lines) */
+        .focus-indicator-top, .focus-indicator-bottom {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            background-color: rgba(100, 100, 100, 0.3);
+            height: 15px;
+        }
+        .focus-indicator-top { top: 0; }
+        .focus-indicator-bottom { bottom: 0; }
+
+        .word-part { display: inline-block; }
+        
+        .word-left { 
+            text-align: right; 
+            width: 50%; /* Pushes text to end at center */
+            padding-right: 1px; /* Slight offset for optics */
+        }
+        
+        .word-focus {
+            color: #ef4444; /* Tailwind red-500 */
+            font-weight: 700;
+            width: auto;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        .word-right { 
+            text-align: left; 
+            width: 50%; /* Starts text from center */
+            position: absolute;
+            left: 50%;
+            padding-left: 0.6em; /* Offset by approx width of focus char */
+        }
+
+        /* UI Transitions */
+        .ui-panel { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s; }
+        .hidden-panel { transform: translateY(20px); opacity: 0; pointer-events: none; }
+        
+        /* Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-white dark:bg-amoled text-gray-900 dark:text-gray-200 h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300">
+
+    <!-- 1. HEADS UP DISPLAY (HUD) -->
+    <nav class="flex justify-between items-center p-4 px-6 text-xs font-mono opacity-60 z-20">
+        <div id="clock">12:00</div>
+        <div id="file-name" class="truncate max-w-[200px] hidden md:block">No File Selected</div>
+        <div id="battery" class="flex items-center gap-2">
+            <span>--%</span>
+            <i class="fas fa-battery-half"></i>
+        </div>
+    </nav>
+
+    <!-- 2. MAIN READER STAGE -->
+    <main class="flex-grow flex flex-col items-center justify-center relative w-full">
+        
+        <!-- Focus Guides -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 dark:opacity-20">
+            <div class="w-px h-32 bg-gray-500"></div>
+        </div>
+
+        <!-- The Word -->
+        <div id="reader-container" class="relative w-full max-w-4xl h-40 flex items-center justify-center text-4xl md:text-6xl font-mono">
+            <div id="empty-state" class="absolute text-center opacity-50 text-sm md:text-base transition-opacity duration-300">
+                <i class="fas fa-book-open text-4xl mb-4 block"></i>
+                Drop PDF/EPUB or click Folder to open
+            </div>
+            
+            <!-- Actual Word Rendering -->
+            <div id="word-stage" class="relative w-full text-center hidden">
+                <!-- Using a sophisticated 3-part layout for perfect centering -->
+                <span id="text-left" class="opacity-80"></span><span id="text-focus" class="text-red-500 font-bold"></span><span id="text-right" class="opacity-80"></span>
+            </div>
+        </div>
+
+        <!-- Stats Overlay (WPM) -->
+        <div id="wpm-indicator" class="absolute bottom-1/4 text-xs font-mono text-blue-500 opacity-0 transition-opacity duration-300">
+            300 WPM
+        </div>
+
+    </main>
+
+    <!-- 3. CONTROL PANEL -->
+    <footer class="w-full bg-gray-100 dark:bg-amoled-surface border-t border-gray-200 dark:border-amoled-border z-30 transition-all duration-300 pb-safe">
+        
+        <!-- Progress Info -->
+        <div class="w-full h-1 bg-gray-300 dark:bg-gray-800 relative group cursor-pointer" id="timeline-container">
+            <div id="progress-fill" class="h-full bg-blue-500 w-0 transition-all duration-100"></div>
+            <!-- Hover Preview could go here -->
+        </div>
+
+        <div class="p-4 md:p-6 max-w-4xl mx-auto">
+            
+            <div class="flex justify-between items-end mb-4 text-xs font-mono opacity-60">
+                <span id="chapter-name">Chapter 1</span>
+                <span><span id="current-idx">0</span> / <span id="total-words">0</span></span>
+            </div>
+
+            <!-- Controls Grid -->
+            <div class="flex items-center justify-between gap-4">
+                
+                <!-- Left: File & Settings -->
+                <div class="flex gap-4">
+                    <label class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 cursor-pointer transition">
+                        <input type="file" id="file-upload" class="hidden" accept=".pdf,.epub">
+                        <i class="fas fa-folder-open text-lg"></i>
+                    </label>
+                    <button onclick="themeMgr.toggle()" class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                        <i class="fas fa-adjust text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Center: Playback -->
+                <div class="flex items-center gap-6">
+                    <button onclick="engine.jump(-10)" class="text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
+                        <i class="fas fa-backward"></i>
+                    </button>
+                    
+                    <button id="play-pause-btn" onclick="engine.toggle()" class="w-14 h-14 bg-white dark:bg-gray-200 text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition">
+                        <i class="fas fa-play ml-1 text-xl"></i>
+                    </button>
+                    
+                    <button onclick="engine.jump(10)" class="text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
+                        <i class="fas fa-forward"></i>
+                    </button>
+                </div>
+
+                <!-- Right: Speed -->
+                <div class="flex items-center gap-2 group relative">
+                    <i class="fas fa-tachometer-alt text-gray-500"></i>
+                    <div class="absolute bottom-12 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden group-hover:block w-48">
+                        <div class="flex justify-between mb-2 text-xs">
+                            <span>Speed</span>
+                            <span id="speed-val">300</span>
+                        </div>
+                        <input type="range" id="speed-slider" min="100" max="1000" step="10" value="300">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </footer>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loader" class="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center hidden backdrop-blur-sm">
+        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <div id="loader-text" class="text-white font-mono text-sm animate-pulse">Processing...</div>
+    </div>
+
+    <!-- ----------------------------------------------------------------------- -->
+    <!-- LOGIC CORE                                                              -->
+    <!-- ----------------------------------------------------------------------- -->
+    <script>
+        /**
+         * 1. PARSER WORKER (Embed as blob to work in single file)
+         * Runs on separate thread to prevent UI freezing during large file loads.
+         */
+        const workerCode = `
+            self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+            // PDF.js is loaded in main thread and passed, or simplified text extraction here. 
+            // Since PDF.js is complex to proxy, we'll do PDF text extraction in main but chunking here.
+            
+            self.onmessage = async (e) => {
+                const { type, payload } = e.data;
+                if (type === 'PARSE_TEXT') {
+                    const words = processText(payload);
+                    self.postMessage({ type: 'COMPLETE', data: words });
+                }
+            };
+
+            function processText(text) {
+                // Advanced regex to split but keep important punctuation attached for logic
+                // We split by whitespace but clean up weird artifacts
+                const rawWords = text.split(/[\\s\\n\\r]+/);
+                const processed = [];
+                
+                rawWords.forEach(w => {
+                    if (!w) return;
+                    // Trim invisible characters
+                    let clean = w.trim();
+                    if (clean.length > 0) processed.push(clean);
+                });
+                return processed;
+            }
+        `;
+
+        const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+        const workerUrl = URL.createObjectURL(workerBlob);
+        const processingWorker = new Worker(workerUrl);
+
+        /**
+         * 2. RSVP ENGINE (Rapid Serial Visual Presentation)
+         * Handles the math of displaying words at precise intervals.
+         */
+        class RSVPEngine {
+            constructor() {
+                this.words = [];
+                this.index = 0;
+                this.isPlaying = false;
+                this.wpm = 300;
+                this.lastFrameTime = 0;
+                this.delayAccumulator = 0;
+                
+                // Punctuation Delays (Multipliers)
+                this.delays = {
+                    base: 1,
+                    comma: 1.5,  // , ;
+                    period: 2.2, // . ! ?
+                    long: 1.2    // Words > 8 chars
+                };
+
+                this.ui = {
+                    left: document.getElementById('text-left'),
+                    focus: document.getElementById('text-focus'),
+                    right: document.getElementById('text-right'),
+                    stage: document.getElementById('word-stage'),
+                    empty: document.getElementById('empty-state'),
+                    btn: document.getElementById('play-pause-btn')
+                };
+
+                // Bind loop
+                this.loop = this.loop.bind(this);
+            }
+
+            loadBook(wordList) {
+                this.pause();
+                this.words = wordList;
+                this.index = 0;
+                this.updateUI();
+                this.ui.empty.classList.add('hidden');
+                this.ui.stage.classList.remove('hidden');
+                uiMgr.updateTotal(this.words.length);
+            }
+
+            toggle() {
+                if (this.isPlaying) this.pause();
+                else this.play();
+            }
+
+            play() {
+                if (this.words.length === 0) return;
+                this.isPlaying = true;
+                this.ui.btn.innerHTML = '<i class="fas fa-pause text-xl"></i>';
+                this.lastFrameTime = performance.now();
+                requestAnimationFrame(this.loop);
+            }
+
+            pause() {
+                this.isPlaying = false;
+                this.ui.btn.innerHTML = '<i class="fas fa-play ml-1 text-xl"></i>';
+            }
+
+            jump(offset) {
+                this.index = Math.min(Math.max(0, this.index + offset), this.words.length - 1);
+                this.render();
+                this.pause(); // Auto pause on jump usually feels better
+            }
+
+            setSpeed(newWpm) {
+                this.wpm = parseInt(newWpm);
+                document.getElementById('wpm-indicator').innerText = `${this.wpm} WPM`;
+                document.getElementById('speed-val').innerText = this.wpm;
+                
+                // Show floating indicator
+                const ind = document.getElementById('wpm-indicator');
+                ind.style.opacity = '1';
+                clearTimeout(this.wpmTimeout);
+                this.wpmTimeout = setTimeout(() => ind.style.opacity = '0', 2000);
+            }
+
+            // The Heartbeat
+            loop(timestamp) {
+                if (!this.isPlaying) return;
+
+                const deltaTime = timestamp - this.lastFrameTime;
+                this.lastFrameTime = timestamp;
+
+                // Calculate base delay for current WPM
+                // 60000ms / 300wpm = 200ms per word
+                const baseDelay = 60000 / this.wpm;
+
+                // Smart Delay Logic based on *current* word (the one user is reading)
+                let multiplier = 1;
+                const currentWord = this.words[this.index];
+                
+                if (currentWord) {
+                    const lastChar = currentWord.slice(-1);
+                    if ('.!?'.includes(lastChar)) multiplier = this.delays.period;
+                    else if (',;:'.includes(lastChar)) multiplier = this.delays.comma;
+                    else if (currentWord.length > 8) multiplier = this.delays.long;
+                }
+
+                const targetDelay = baseDelay * multiplier;
+
+                this.delayAccumulator += deltaTime;
+
+                if (this.delayAccumulator >= targetDelay) {
+                    this.delayAccumulator = 0; // Reset or subtract targetDelay to catch up (reset is smoother for eyes)
+                    
+                    if (this.index < this.words.length - 1) {
+                        this.index++;
+                        this.render();
+                    } else {
+                        this.pause(); // End of book
+                    }
+                }
+
+                requestAnimationFrame(this.loop);
+            }
+
+            render() {
+                const word = this.words[this.index];
+                if (!word) return;
+
+                // ORP (Optical Recognition Point) Logic
+                // We want the focus point roughly 35-40% into the word.
+                let pivot = Math.ceil((word.length - 1) * 0.35);
+                
+                // Special handling for very short words
+                if (word.length === 1) pivot = 0;
+
+                const start = word.substring(0, pivot);
+                const middle = word.substring(pivot, pivot + 1);
+                const end = word.substring(pivot + 1);
+
+                this.ui.left.innerText = start;
+                this.ui.focus.innerText = middle;
+                this.ui.right.innerText = end;
+
+                // Update Progress UI occasionally (every 10 words to save DOM calls) or if paused
+                if (this.index % 10 === 0 || !this.isPlaying) {
+                    this.updateUI();
+                }
+            }
+
+            updateUI() {
+                uiMgr.updateProgress(this.index, this.words.length);
+            }
+        }
+
+        /**
+         * 3. UI MANAGER
+         * Handles DOM updates outside the hot loop.
+         */
+        const uiMgr = {
+            els: {
+                progressFill: document.getElementById('progress-fill'),
+                currentIdx: document.getElementById('current-idx'),
+                totalWords: document.getElementById('total-words'),
+                battery: document.querySelector('#battery span'),
+                clock: document.getElementById('clock'),
+                loader: document.getElementById('loader'),
+                fileName: document.getElementById('file-name')
+            },
+
+            updateProgress(current, total) {
+                if (total === 0) return;
+                const pct = (current / total) * 100;
+                this.els.progressFill.style.width = `${pct}%`;
+                this.els.currentIdx.innerText = current;
+            },
+
+            updateTotal(total) {
+                this.els.totalWords.innerText = total;
+            },
+
+            setLoading(isLoading, text="Processing...") {
+                const loader = this.els.loader;
+                document.getElementById('loader-text').innerText = text;
+                if (isLoading) loader.classList.remove('hidden');
+                else loader.classList.add('hidden');
+            }
+        };
+
+        // --- System Data (Battery/Clock) ---
+        function updateSystemInfo() {
+            // Clock
+            const now = new Date();
+            uiMgr.els.clock.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Battery
+            if (navigator.getBattery) {
+                navigator.getBattery().then(batt => {
+                    const level = Math.round(batt.level * 100);
+                    uiMgr.els.battery.innerText = `${level}%`;
+                });
+            }
+        }
+        setInterval(updateSystemInfo, 30000);
+        updateSystemInfo();
+
+        // --- Theme Manager ---
+        const themeMgr = {
+            toggle() {
+                document.documentElement.classList.toggle('dark');
+            }
+        };
+
+        // --- Initialization ---
+        document.documentElement.classList.add('dark'); // Default to dark
+        const engine = new RSVPEngine();
+
+        // --- File Handling (The complex part) ---
+        document.getElementById('file-upload').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            uiMgr.els.fileName.innerText = file.name;
+            uiMgr.setLoading(true, "Reading File...");
+            
+            try {
+                let text = "";
+                
+                if (file.name.toLowerCase().endsWith('.pdf')) {
+                    text = await parsePDF(file);
+                } else if (file.name.toLowerCase().endsWith('.epub')) {
+                    text = await parseEPUB(file);
+                } else {
+                    alert("Only PDF and EPUB supported.");
+                    uiMgr.setLoading(false);
+                    return;
+                }
+
+                uiMgr.setLoading(true, "Segmenting Words...");
+                
+                // Send to worker for processing
+                processingWorker.postMessage({ type: 'PARSE_TEXT', payload: text });
+
+            } catch (err) {
+                console.error(err);
+                alert("Error reading file. See console.");
+                uiMgr.setLoading(false);
+            }
+        });
+
+        // Worker Listener
+        processingWorker.onmessage = (e) => {
+            if (e.data.type === 'COMPLETE') {
+                engine.loadBook(e.data.data);
+                uiMgr.setLoading(false);
+            }
+        };
+
+        // --- Parsers ---
+
+        async function parsePDF(file) {
+            const buffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(buffer).promise;
+            let fullText = "";
+            
+            // Iterate pages
+            for (let i = 1; i <= pdf.numPages; i++) {
+                uiMgr.setLoading(true, `Parsing PDF Page ${i}/${pdf.numPages}`);
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const strings = content.items.map(item => item.str);
+                fullText += strings.join(" ") + " ";
+            }
+            return fullText;
+        }
+
+        async function parseEPUB(file) {
+            const zip = await JSZip.loadAsync(file);
+            const parser = new DOMParser();
+
+            // 1. Locate OPF
+            const container = await zip.file("META-INF/container.xml").async("text");
+            const containerDoc = parser.parseFromString(container, "text/xml");
+            const rootPath = containerDoc.getElementsByTagName("rootfile")[0].getAttribute("full-path");
+            
+            // 2. Read OPF
+            const opf = await zip.file(rootPath).async("text");
+            const opfDoc = parser.parseFromString(opf, "text/xml");
+            
+            // 3. Get Spine
+            const manifest = {};
+            Array.from(opfDoc.getElementsByTagName("item")).forEach(item => {
+                manifest[item.getAttribute("id")] = item.getAttribute("href");
+            });
+
+            const spine = Array.from(opfDoc.getElementsByTagName("itemref"));
+            let fullText = "";
+            const rootDir = rootPath.substring(0, rootPath.lastIndexOf("/") + 1);
+
+            // 4. Iterate Spine
+            let count = 0;
+            for (const item of spine) {
+                count++;
+                uiMgr.setLoading(true, `Parsing EPUB Section ${count}/${spine.length}`);
+                
+                const id = item.getAttribute("idref");
+                const href = manifest[id];
+                if (href) {
+                    const path = rootDir + href;
+                    const content = await zip.file(path).async("text");
+                    const doc = parser.parseFromString(content, "text/html");
+                    fullText += doc.body.textContent + " ";
+                }
+            }
+            return fullText;
+        }
+
+        // --- Event Listeners ---
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            engine.setSpeed(e.target.value);
+        });
+
+        document.getElementById('timeline-container').addEventListener('click', (e) => {
+            if (engine.words.length === 0) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const pct = x / rect.width;
+            const newIndex = Math.floor(pct * engine.words.length);
+            
+            engine.index = newIndex;
+            engine.render();
+            engine.pause();
+        });
+
+        // Keyboard Controls
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                engine.toggle();
+            } else if (e.code === 'ArrowRight') {
+                engine.jump(10);
+            } else if (e.code === 'ArrowLeft') {
+                engine.jump(-10);
+            } else if (e.code === 'ArrowUp') {
+                const slider = document.getElementById('speed-slider');
+                slider.value = parseInt(slider.value) + 10;
+                engine.setSpeed(slider.value);
+            } else if (e.code === 'ArrowDown') {
+                const slider = document.getElementById('speed-slider');
+                slider.value = parseInt(slider.value) - 10;
+                engine.setSpeed(slider.value);
+            }
+        });
+
+    </script>
+</body>
+</html>
+
