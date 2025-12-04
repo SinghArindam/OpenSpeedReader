@@ -1,1 +1,1 @@
-# OpenSpeedReader ([Live(https://singharindam.github.io/OpenSpeedReader/)])
+# OpenSpeedReader ([Live](https://singharindam.github.io/OpenSpeedReader/))
