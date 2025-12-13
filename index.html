@@ -256,22 +256,43 @@
                     </button>
                 </div>
 
-                <!-- Right: Speed -->
-                <!-- Right: Speed -->
-                <button onclick="uiMgr.toggleSpeed()"
-                    class="flex items-center gap-2 relative p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition">
-                    <i class="fas fa-tachometer-alt text-gray-500"></i>
+                <!-- Right: Settings Group -->
+                <div class="flex items-center gap-2">
 
-                    <!-- Menu -->
-                    <div id="speed-menu" onclick="event.stopPropagation()"
-                        class="absolute bottom-14 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden w-48 z-50 cursor-auto text-left">
-                        <div class="flex justify-between mb-2 text-xs text-gray-900 dark:text-gray-100">
-                            <span>Speed</span>
-                            <span id="speed-val">300</span>
+                    <!-- Font Size -->
+                    <button onclick="uiMgr.toggleFont()"
+                        class="flex items-center gap-2 relative p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                        <i class="fas fa-text-height text-gray-500"></i>
+
+                        <!-- Menu -->
+                        <div id="font-menu" onclick="event.stopPropagation()"
+                            class="absolute bottom-14 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden w-48 z-50 cursor-auto text-left">
+                            <div class="flex justify-between mb-2 text-xs text-gray-900 dark:text-gray-100">
+                                <span>Size</span>
+                                <span id="font-val">1.0x</span>
+                            </div>
+                            <input type="range" id="font-slider" min="0.5" max="2.0" step="0.1" value="1.0"
+                                class="w-full">
                         </div>
-                        <input type="range" id="speed-slider" min="100" max="1000" step="10" value="300" class="w-full">
-                    </div>
-                </button>
+                    </button>
+
+                    <!-- Speed -->
+                    <button onclick="uiMgr.toggleSpeed()"
+                        class="flex items-center gap-2 relative p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                        <i class="fas fa-tachometer-alt text-gray-500"></i>
+
+                        <!-- Menu -->
+                        <div id="speed-menu" onclick="event.stopPropagation()"
+                            class="absolute bottom-14 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden w-48 z-50 cursor-auto text-left">
+                            <div class="flex justify-between mb-2 text-xs text-gray-900 dark:text-gray-100">
+                                <span>Speed</span>
+                                <span id="speed-val">300</span>
+                            </div>
+                            <input type="range" id="speed-slider" min="100" max="1000" step="10" value="300"
+                                class="w-full">
+                        </div>
+                    </button>
+                </div>
 
             </div>
         </div>
@@ -526,17 +547,37 @@
 
             toggleSpeed() {
                 const menu = document.getElementById('speed-menu');
+                document.getElementById('font-menu').classList.add('hidden'); // Close other
                 menu.classList.toggle('hidden');
+            },
+
+            toggleFont() {
+                const menu = document.getElementById('font-menu');
+                document.getElementById('speed-menu').classList.add('hidden'); // Close other
+                menu.classList.toggle('hidden');
+            },
+
+            setFontScale(scale) {
+                document.getElementById('font-val').innerText = scale + 'x';
+                // Apply scale to the word stage
+                // We use zoom or transform? Transform is smoother.
+                document.getElementById('word-stage').style.transform = `scale(${scale})`;
             }
         };
 
         // Close menus on outside click
         document.addEventListener('click', (e) => {
-            const menu = document.getElementById('speed-menu');
-            const btn = document.querySelector('[onclick="uiMgr.toggleSpeed()"]');
+            const fontMenu = document.getElementById('font-menu');
+            const fontBtn = document.querySelector('[onclick="uiMgr.toggleFont()"]');
 
-            if (!menu.contains(e.target) && !btn.contains(e.target)) {
-                menu.classList.add('hidden');
+            const speedMenu = document.getElementById('speed-menu');
+            const speedBtn = document.querySelector('[onclick="uiMgr.toggleSpeed()"]');
+
+            if (!fontMenu.contains(e.target) && !fontBtn.contains(e.target)) {
+                fontMenu.classList.add('hidden');
+            }
+            if (!speedMenu.contains(e.target) && !speedBtn.contains(e.target)) {
+                speedMenu.classList.add('hidden');
             }
         });
 
@@ -569,8 +610,8 @@
         const engine = new RSVPEngine();
 
         // --- File Handling (The complex part) ---
-        document.getElementById('file-upload').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
+        // --- File Handling (The complex part) ---
+        async function handleFile(file) {
             if (!file) return;
 
             uiMgr.els.fileName.innerText = file.name;
@@ -599,7 +640,33 @@
                 alert("Error reading file. See console.");
                 uiMgr.setLoading(false);
             }
+        }
+
+        document.getElementById('file-upload').addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
         });
+
+        // Auto-load sample if available
+        (async () => {
+            // Try fetching sample files from relative path
+            const samples = ['sample/sample.epub', 'sample/sample.pdf'];
+            for (const path of samples) {
+                try {
+                    const res = await fetch(path);
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        const name = path.split('/').pop();
+                        const type = name.endsWith('.pdf') ? 'application/pdf' : 'application/epub+zip';
+                        const file = new File([blob], name, { type: type });
+                        console.log("Auto-loading sample:", name);
+                        handleFile(file);
+                        break;
+                    }
+                } catch (e) {
+                    // Ignore errors, just means file not found or CORS blocked
+                }
+            }
+        })();
 
         // Worker Listener
         processingWorker.onmessage = (e) => {
@@ -671,6 +738,10 @@
         // --- Event Listeners ---
         document.getElementById('speed-slider').addEventListener('input', (e) => {
             engine.setSpeed(e.target.value);
+        });
+
+        document.getElementById('font-slider').addEventListener('input', (e) => {
+            uiMgr.setFontScale(e.target.value);
         });
 
         document.getElementById('timeline-container').addEventListener('click', (e) => {
