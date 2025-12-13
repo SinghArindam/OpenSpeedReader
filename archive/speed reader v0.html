@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speed Reader Pro</title>
+    <!-- Tailwind CSS for layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Libraries for File Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <script>
+        // Configure PDF.js Worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // Tailwind config for custom colors
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        amoled: {
+                            bg: '#000000',
+                            surface: '#121212',
+                            text: '#ffffff',
+                            accent: '#3b82f6'
+                        },
+                        light: {
+                            bg: '#ffffff',
+                            surface: '#f3f4f6',
+                            text: '#000000',
+                            accent: '#2563eb'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Styles for Word Centering */
+        .reader-display {
+            font-family: 'Courier New', Courier, monospace; /* Monospace helps stability */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 40vh;
+            font-size: 3.5rem;
+            line-height: 1;
+            user-select: none;
+            position: relative;
+        }
+
+        /* Focus point logic: highlight the optimal viewing position */
+        .focus-letter {
+            color: #ef4444; /* Red color for focus point */
+            font-weight: bold;
+        }
+
+        /* Smooth UI Transitions */
+        body {
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        .progress-bar {
+            transition: width 0.2s ease-out;
+        }
+
+        /* Hide scrollbars for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-light-bg text-light-text dark:bg-amoled-bg dark:text-amoled-text h-screen flex flex-col overflow-hidden transition-colors duration-300">
+
+    <!-- Top HUD: Time & Battery -->
+    <header class="flex justify-between items-center p-4 text-sm font-mono opacity-70 select-none">
+        <div id="clock">00:00</div>
+        <div id="battery" class="flex items-center gap-2">
+            <span>--%</span>
+            <i class="fas fa-battery-three-quarters"></i>
+        </div>
+    </header>
+
+    <!-- Main Reading Area -->
+    <main class="flex-grow flex flex-col items-center justify-center relative">
+        
+        <!-- File Upload Overlay (Initial State) -->
+        <div id="upload-screen" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-light-bg dark:bg-amoled-bg transition-opacity duration-500">
+            <div class="text-center space-y-6 max-w-md px-6">
+                <h1 class="text-4xl font-bold tracking-tighter">Speed<span class="text-blue-500">Read</span></h1>
+                <p class="text-sm opacity-60">Upload a PDF or EPUB to begin reading at high speed.</p>
+                
+                <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-900 transition-colors">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <i class="fas fa-cloud-upload-alt text-3xl mb-2 text-gray-500"></i>
+                        <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Click to upload</span></p>
+                        <p class="text-xs text-gray-500">PDF or EPUB</p>
+                    </div>
+                    <input id="file-input" type="file" class="hidden" accept=".pdf,.epub" />
+                </label>
+                <div id="loading-spinner" class="hidden mt-4">
+                    <i class="fas fa-spinner fa-spin text-2xl text-blue-500"></i>
+                    <span class="ml-2 text-sm">Processing book...</span>
+                </div>
+                <div id="error-msg" class="text-red-500 text-sm hidden"></div>
+            </div>
+        </div>
+
+        <!-- The Reader Display -->
+        <div class="w-full max-w-4xl px-4 text-center">
+            <div id="word-display" class="reader-display mb-8">
+                <span class="opacity-50 text-2xl">Ready</span>
+            </div>
+        </div>
+        
+    </main>
+
+    <!-- Bottom Controls -->
+    <footer class="p-6 bg-light-surface dark:bg-amoled-surface shadow-lg rounded-t-3xl border-t border-gray-200 dark:border-gray-800 transition-colors duration-300">
+        
+        <!-- Progress Bars -->
+        <div class="mb-6 space-y-3">
+            <!-- Chapter Progress -->
+            <div class="flex justify-between text-xs opacity-70 mb-1">
+                <span>Chapter Progress</span>
+                <span id="chapter-percent">0%</span>
+            </div>
+            <div class="w-full bg-gray-300 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div id="chapter-bar" class="bg-blue-500 h-1.5 rounded-full progress-bar" style="width: 0%"></div>
+            </div>
+
+            <!-- Book Progress -->
+            <div class="flex justify-between text-xs opacity-70 mb-1 mt-2">
+                <span>Total Progress</span>
+                <span id="book-percent">0%</span>
+            </div>
+            <div class="w-full bg-gray-300 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div id="book-bar" class="bg-green-500 h-1.5 rounded-full progress-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="flex flex-col items-center gap-4">
+            
+            <!-- Playback Controls -->
+            <div class="flex items-center gap-6">
+                <button onclick="rewind()" class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                    <i class="fas fa-undo"></i> -10
+                </button>
+                
+                <button id="play-btn" onclick="togglePlay()" class="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center text-xl shadow-lg transform hover:scale-105 transition">
+                    <i class="fas fa-play ml-1"></i>
+                </button>
+                
+                <button onclick="forward()" class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                    +10 <i class="fas fa-redo"></i>
+                </button>
+            </div>
+
+            <!-- Settings Row -->
+            <div class="flex items-center justify-between w-full max-w-md mt-2">
+                <!-- Theme Toggle -->
+                <button onclick="toggleTheme()" class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition text-sm">
+                    <i class="fas fa-moon"></i> / <i class="fas fa-sun"></i>
+                </button>
+
+                <!-- Speed Control -->
+                <div class="flex items-center gap-3 bg-gray-200 dark:bg-gray-800 px-4 py-2 rounded-full">
+                    <span class="text-xs font-bold w-12 text-right"><span id="wpm-display">300</span> wpm</span>
+                    <input type="range" id="wpm-slider" min="100" max="1000" step="10" value="300" class="w-24 md:w-40 h-1 bg-gray-400 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+                <!-- Reset/File -->
+                <button onclick="resetReader()" class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition text-sm text-red-400">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- State Management ---
+        let contentData = []; // Array of { word: string, chapterId: number }
+        let chapterMap = {}; // { chapterId: { start: index, end: index, length: number } }
+        let currentIndex = 0;
+        let isPlaying = false;
+        let wpm = 300;
+        let intervalId = null;
+        let totalWords = 0;
+
+        // --- DOM Elements ---
+        const wordDisplay = document.getElementById('word-display');
+        const fileInput = document.getElementById('file-input');
+        const uploadScreen = document.getElementById('upload-screen');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const errorMsg = document.getElementById('error-msg');
+        const playBtnIcon = document.querySelector('#play-btn i');
+        const wpmSlider = document.getElementById('wpm-slider');
+        const wpmDisplay = document.getElementById('wpm-display');
+        const chapterBar = document.getElementById('chapter-bar');
+        const bookBar = document.getElementById('book-bar');
+        const chapterPercent = document.getElementById('chapter-percent');
+        const bookPercent = document.getElementById('book-percent');
+
+        // --- Initialization ---
+        document.documentElement.classList.add('dark'); // Default to dark mode
+        updateBattery();
+        updateClock();
+        setInterval(updateClock, 1000); // Update clock every second
+        setInterval(updateBattery, 60000); // Update battery every minute
+
+        // --- HUD Logic ---
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('clock').innerText = timeString;
+        }
+
+        function updateBattery() {
+            if ('getBattery' in navigator) {
+                navigator.getBattery().then(battery => {
+                    const level = Math.round(battery.level * 100);
+                    document.querySelector('#battery span').innerText = `${level}%`;
+                });
+            } else {
+                document.getElementById('battery').style.display = 'none';
+            }
+        }
+
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        // --- Reader Engine ---
+
+        // Basic clean-up for text
+        function cleanText(text) {
+            return text.replace(/\s+/g, ' ').trim();
+        }
+
+        // Split text into word objects
+        function processTextToWords(text, chapterId) {
+            const words = text.split(' ');
+            return words.map(w => ({ word: w, chapterId: chapterId })).filter(w => w.word.length > 0);
+        }
+
+        // Render the current word with RSVP "Optimum Recognition Point" formatting
+        function renderWord() {
+            if (currentIndex >= totalWords) {
+                pause();
+                currentIndex = totalWords - 1;
+                return;
+            }
+            
+            const item = contentData[currentIndex];
+            const word = item.word;
+            
+            // Logic to find pivot character (roughly 30-40% into the word)
+            const pivot = Math.ceil((word.length - 1) * 0.35);
+            const start = word.substring(0, pivot);
+            const middle = word.substring(pivot, pivot + 1);
+            const end = word.substring(pivot + 1);
+
+            wordDisplay.innerHTML = `${start}<span class="focus-letter">${middle}</span>${end}`;
+
+            updateProgress();
+        }
+
+        function updateProgress() {
+            if (totalWords === 0) return;
+
+            // Total Progress
+            const totalPct = ((currentIndex + 1) / totalWords) * 100;
+            bookBar.style.width = `${totalPct}%`;
+            bookPercent.innerText = `${Math.floor(totalPct)}%`;
+
+            // Chapter Progress
+            const currentChapterId = contentData[currentIndex].chapterId;
+            const chapterInfo = chapterMap[currentChapterId];
+            if (chapterInfo) {
+                const chapterProgress = currentIndex - chapterInfo.start;
+                const chapterPct = (chapterProgress / chapterInfo.length) * 100;
+                chapterBar.style.width = `${chapterPct}%`;
+                chapterPercent.innerText = `${Math.floor(chapterPct)}%`;
+            }
+        }
+
+        function togglePlay() {
+            if (totalWords === 0) return;
+            if (isPlaying) {
+                pause();
+            } else {
+                play();
+            }
+        }
+
+        function play() {
+            isPlaying = true;
+            playBtnIcon.className = "fas fa-pause";
+            
+            const delay = 60000 / wpm;
+            
+            intervalId = setInterval(() => {
+                currentIndex++;
+                renderWord();
+            }, delay);
+        }
+
+        function pause() {
+            isPlaying = false;
+            playBtnIcon.className = "fas fa-play ml-1";
+            clearInterval(intervalId);
+        }
+
+        function rewind() {
+            currentIndex = Math.max(0, currentIndex - 10);
+            renderWord();
+        }
+
+        function forward() {
+            currentIndex = Math.min(totalWords - 1, currentIndex + 10);
+            renderWord();
+        }
+
+        function resetReader() {
+            pause();
+            contentData = [];
+            currentIndex = 0;
+            totalWords = 0;
+            uploadScreen.classList.remove('hidden');
+            uploadScreen.style.opacity = '1';
+            fileInput.value = '';
+        }
+
+        // Speed Slider Listener
+        wpmSlider.addEventListener('input', (e) => {
+            wpm = e.target.value;
+            wpmDisplay.innerText = wpm;
+            if (isPlaying) {
+                // Restart interval with new speed
+                clearInterval(intervalId);
+                play();
+            }
+        });
+
+        // --- File Handling ---
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            loadingSpinner.classList.remove('hidden');
+            errorMsg.classList.add('hidden');
+
+            try {
+                if (file.name.endsWith('.pdf')) {
+                    await parsePDF(file);
+                } else if (file.name.endsWith('.epub')) {
+                    await parseEPUB(file);
+                } else {
+                    throw new Error("Unsupported file format");
+                }
+
+                // Setup Reader
+                totalWords = contentData.length;
+                currentIndex = 0;
+                
+                // Analyze chapters
+                let currentChapId = -1;
+                let startIdx = 0;
+                contentData.forEach((item, idx) => {
+                    if (item.chapterId !== currentChapId) {
+                        if (currentChapId !== -1) {
+                            chapterMap[currentChapId].end = idx - 1;
+                            chapterMap[currentChapId].length = idx - startIdx;
+                        }
+                        currentChapId = item.chapterId;
+                        startIdx = idx;
+                        chapterMap[currentChapId] = { start: startIdx };
+                    }
+                });
+                // Final chapter close
+                if (currentChapId !== -1) {
+                    chapterMap[currentChapId].end = totalWords - 1;
+                    chapterMap[currentChapId].length = totalWords - startIdx;
+                }
+
+                // Hide Upload Screen
+                uploadScreen.style.opacity = '0';
+                setTimeout(() => uploadScreen.classList.add('hidden'), 500);
+                
+                renderWord();
+
+            } catch (err) {
+                console.error(err);
+                errorMsg.innerText = "Error reading file: " + err.message;
+                errorMsg.classList.remove('hidden');
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        // --- PDF Parser ---
+        async function parsePDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            
+            contentData = [];
+            
+            // Treat entire PDF as one chapter (0) or try to treat pages as chapters?
+            // To make "Chapter Progress" meaningful, let's treat every 10 pages as a 'chapter' section,
+            // or just map chapter progress to book progress if PDF structure is unknown.
+            // Simplified: PDF is one big chapter (0).
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const textItems = textContent.items.map(item => item.str).join(' ');
+                
+                const words = processTextToWords(cleanText(textItems), 0);
+                contentData.push(...words);
+            }
+        }
+
+        // --- EPUB Parser ---
+        async function parseEPUB(file) {
+            const zip = await JSZip.loadAsync(file);
+            const parser = new DOMParser();
+
+            // 1. Find META-INF/container.xml
+            const containerXml = await zip.file("META-INF/container.xml").async("text");
+            const containerDoc = parser.parseFromString(containerXml, "text/xml");
+            const rootPath = containerDoc.querySelector("rootfile").getAttribute("full-path");
+
+            // 2. Parse OPF
+            const opfXml = await zip.file(rootPath).async("text");
+            const opfDoc = parser.parseFromString(opfXml, "text/xml");
+
+            // 3. Get Spine (reading order) and Manifest (file paths)
+            const manifest = {};
+            opfDoc.querySelectorAll("manifest > item").forEach(item => {
+                manifest[item.getAttribute("id")] = item.getAttribute("href");
+            });
+
+            const spineRefs = Array.from(opfDoc.querySelectorAll("spine > itemref")).map(ref => ref.getAttribute("idref"));
+
+            // Resolve relative paths for reading files
+            const opfFolder = rootPath.substring(0, rootPath.lastIndexOf("/") + 1);
+
+            contentData = [];
+            let chapterCounter = 0;
+
+            for (const idref of spineRefs) {
+                const href = manifest[idref];
+                if (!href) continue;
+
+                // Handle path resolution
+                const fullPath = opfFolder + href;
+                const fileData = zip.file(fullPath);
+                
+                if (fileData) {
+                    const htmlText = await fileData.async("text");
+                    const doc = parser.parseFromString(htmlText, "text/html");
+                    const rawText = doc.body.innerText || ""; // Extract plain text
+                    
+                    const words = processTextToWords(cleanText(rawText), chapterCounter);
+                    if (words.length > 0) {
+                        contentData.push(...words);
+                        chapterCounter++;
+                    }
+                }
+            }
+        }
+        
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (uploadScreen.classList.contains('hidden')) {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    togglePlay();
+                } else if (e.code === 'ArrowRight') {
+                    forward();
+                } else if (e.code === 'ArrowLeft') {
+                    rewind();
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
+
