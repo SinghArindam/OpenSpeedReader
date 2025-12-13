@@ -169,26 +169,32 @@
             </div>
 
             <!-- Actual Word Rendering -->
-            <div id="word-stage" class="relative w-full flex items-baseline justify-center gap-2 md:gap-8 hidden px-2">
-                <!-- Context Words (Left) -->
-                <span id="ctx-l2"
-                    class="text-gray-300 dark:text-gray-800 text-xl md:text-3xl hidden md:inline font-normal select-none"></span>
-                <span id="ctx-l1"
-                    class="text-gray-400 dark:text-gray-600 text-2xl md:text-4xl font-normal select-none"></span>
+            <div id="word-stage" class="relative w-full h-40 hidden font-mono">
 
-                <!-- Main Word -->
-                <div
-                    class="text-center whitespace-nowrap font-bold text-4xl md:text-6xl min-w-[100px] z-10 transition-transform duration-75">
-                    <span id="text-left" class="opacity-90 dark:text-gray-200"></span><span id="text-focus"
-                        class="text-red-500 scale-110 inline-block"></span><span id="text-right"
-                        class="opacity-90 dark:text-gray-200"></span>
+                <!-- Context Words (Fixed Positions) -->
+                <span id="ctx-l2"
+                    class="absolute top-1/2 -translate-y-1/2 left-[5%] md:left-[15%] w-[10%] text-center text-gray-300 dark:text-gray-800 text-xl md:text-2xl hidden md:block select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
+                <span id="ctx-l1"
+                    class="absolute top-1/2 -translate-y-1/2 left-[15%] md:left-[28%] w-[15%] text-center text-gray-400 dark:text-gray-600 text-2xl md:text-3xl select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
+
+                <!-- Main Word (Strict Center Alignment) -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span id="text-left"
+                        class="absolute right-[50%] mr-[0.6ch] text-right whitespace-nowrap overflow-visible text-4xl md:text-6xl opacity-90 dark:text-gray-200"></span>
+
+                    <!-- Focus Character: Center -->
+                    <span id="text-focus"
+                        class="absolute left-1/2 -translate-x-1/2 text-center w-[1.2ch] font-bold text-red-500 text-4xl md:text-6xl z-10 scale-110"></span>
+
+                    <span id="text-right"
+                        class="absolute left-[50%] ml-[0.6ch] text-left whitespace-nowrap overflow-visible text-4xl md:text-6xl opacity-90 dark:text-gray-200"></span>
                 </div>
 
                 <!-- Context Words (Right) -->
                 <span id="ctx-r1"
-                    class="text-gray-400 dark:text-gray-600 text-2xl md:text-4xl font-normal select-none"></span>
+                    class="absolute top-1/2 -translate-y-1/2 right-[15%] md:right-[28%] w-[15%] text-center text-gray-400 dark:text-gray-600 text-2xl md:text-3xl select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
                 <span id="ctx-r2"
-                    class="text-gray-300 dark:text-gray-800 text-xl md:text-3xl hidden md:inline font-normal select-none"></span>
+                    class="absolute top-1/2 -translate-y-1/2 right-[5%] md:right-[15%] w-[10%] text-center text-gray-300 dark:text-gray-800 text-xl md:text-2xl hidden md:block select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
             </div>
         </div>
 
