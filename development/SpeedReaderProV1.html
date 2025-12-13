@@ -257,17 +257,21 @@
                 </div>
 
                 <!-- Right: Speed -->
-                <div class="flex items-center gap-2 group relative">
+                <!-- Right: Speed -->
+                <button onclick="uiMgr.toggleSpeed()"
+                    class="flex items-center gap-2 relative p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition">
                     <i class="fas fa-tachometer-alt text-gray-500"></i>
-                    <div
-                        class="absolute bottom-12 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden group-hover:block w-48">
-                        <div class="flex justify-between mb-2 text-xs">
+
+                    <!-- Menu -->
+                    <div id="speed-menu" onclick="event.stopPropagation()"
+                        class="absolute bottom-14 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden w-48 z-50 cursor-auto text-left">
+                        <div class="flex justify-between mb-2 text-xs text-gray-900 dark:text-gray-100">
                             <span>Speed</span>
                             <span id="speed-val">300</span>
                         </div>
-                        <input type="range" id="speed-slider" min="100" max="1000" step="10" value="300">
+                        <input type="range" id="speed-slider" min="100" max="1000" step="10" value="300" class="w-full">
                     </div>
-                </div>
+                </button>
 
             </div>
         </div>
@@ -518,8 +522,23 @@
                 document.getElementById('loader-text').innerText = text;
                 if (isLoading) loader.classList.remove('hidden');
                 else loader.classList.add('hidden');
+            },
+
+            toggleSpeed() {
+                const menu = document.getElementById('speed-menu');
+                menu.classList.toggle('hidden');
             }
         };
+
+        // Close menus on outside click
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('speed-menu');
+            const btn = document.querySelector('[onclick="uiMgr.toggleSpeed()"]');
+
+            if (!menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
 
         // --- System Data (Battery/Clock) ---
         function updateSystemInfo() {
