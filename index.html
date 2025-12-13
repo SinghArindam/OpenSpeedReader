@@ -117,6 +117,7 @@
         /* Slider Styling */
         input[type=range] {
             -webkit-appearance: none;
+            appearance: none;
             background: transparent;
         }
 
@@ -135,11 +136,15 @@
             background: #333;
             border-radius: 2px;
         }
+
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
     </style>
 </head>
 
 <body
-    class="bg-white dark:bg-amoled text-gray-900 dark:text-gray-200 h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300">
+    class="bg-white dark:bg-amoled text-gray-900 dark:text-gray-200 h-[100dvh] w-screen flex flex-col overflow-hidden transition-colors duration-300">
 
     <!-- 1. HEADS UP DISPLAY (HUD) -->
     <nav class="flex justify-between items-center p-4 px-6 text-xs font-mono opacity-60 z-20">

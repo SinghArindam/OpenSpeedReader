@@ -1,3 +1,9 @@
+## 2025-12-13 18:23 IST (Session Summary)
+### Changes
+- Fixed mobile UI bottom cut-off issue by adopting Dynamic Viewport Height (`100dvh`).
+- Added safe-area padding (`pb-safe`) to support mobile devices with notches/home bars.
+- Fixed CSS lint warning by adding standard `appearance` property to sliders.
+
 ## 2025-12-13 17:27 (Session Summary)
 ### Changes
 - Implemented responsive context words (1 context word on mobile, 2 on desktop).

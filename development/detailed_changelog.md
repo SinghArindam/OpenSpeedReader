@@ -1,3 +1,32 @@
+## 2025-12-13 18:23 (Detailed Session Changes)
+
+### Mobile Viewport & Safe Area Fixes
+- **Why**: User reported the UI was getting cut off at the bottom on mobile devices. Standard `100vh` does not account for dynamic browser elements like address bars on mobile.
+- **Implementation**:
+    - Updated `body` height from `h-screen` to `h-[100dvh]` to respect the dynamic viewport.
+    - Added `.pb-safe` utility using `env(safe-area-inset-bottom)` and applied it to the footer to prevent content from being hidden behind home gestures.
+- **Code Snippets**:
+  ```html
+  <body class="... h-[100dvh] ...">
+  ```
+  ```css
+  .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom);
+  }
+  ```
+
+### CSS Standards Compliance
+- **Why**: IDE flagged a warning for non-standard CSS property usage in range sliders.
+- **Implementation**: Added the standard `appearance: none` property alongside the vendor-prefixed version.
+- **Code Snippets**:
+  ```css
+  input[type=range] {
+      -webkit-appearance: none;
+      appearance: none; /* Added standard property */
+      background: transparent;
+  }
+  ```
+
 ## 2025-12-13 17:27 (Detailed Session Changes)
 
 ### Responsive Context Words
