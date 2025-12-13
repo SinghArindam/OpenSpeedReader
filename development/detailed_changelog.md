@@ -1,3 +1,22 @@
+## 2025-12-13 19:10 (Detailed Session Changes)
+
+### Drag & Drop Fix
+- **Why**: The drag and drop feature was advertised in the UI/README but not functional; the browser was opening files directly instead of the app processing them.
+- **Implementation**:
+    - Added `dragenter`, `dragover`, `dragleave`, and `drop` event listeners to `document.body`.
+    - Implemented `preventDefaults` to stop native browser file handling.
+    - Added visual cues (Class toggling: `scale-105`) to `#reader-container` during drag operations.
+    - Connected the `drop` event to `handleFile()`.
+- **Code Snippets**:
+  ```javascript
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+      dropZone.addEventListener(evt, preventDefaults, false);
+  });
+  dropZone.addEventListener('drop', (e) => {
+      handleFile(e.dataTransfer.files[0]);
+  });
+  ```
+
 ## 2025-12-13 18:41 (Detailed Session Changes)
 
 ### Documentation & Project Structure

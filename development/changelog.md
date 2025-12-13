@@ -1,3 +1,8 @@
+## 2025-12-13 19:10 IST (Session Summary)
+### Changes
+- Fixed broken Drag & Drop file loading functionality.
+- Enhanced file drop interaction with visual feedback (scaling/opacity).
+
 ## 2025-12-13 18:41 IST (Session Summary)
 ### Changes
 - Created comprehensive `README.md` with features, usage, and keyboard shortcuts.
