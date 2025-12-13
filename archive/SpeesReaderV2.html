@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- viewport-fit=cover is critical for handling notches on phones -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>SpeedReader Pro</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- PDF & EPUB Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        amoled: '#000000',
+                        'amoled-surface': '#111111',
+                        'amoled-border': '#333333',
+                    },
+                    fontFamily: {
+                        mono: ['"Courier New"', 'Courier', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CRITICAL MOBILE FIXES */
+        
+        /* Use dynamic viewport height to account for mobile URL bars */
+        .h-dvh {
+            height: 100vh; /* Fallback */
+            height: 100dvh; 
+        }
+
+        /* Safe area padding for notches and home bars */
+        .pt-safe {
+            padding-top: env(safe-area-inset-top, 20px);
+        }
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        /* Reader Alignment */
+        .reader-stage {
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            user-select: none;
+        }
+
+        /* Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+        }
+
+        /* Focus Line Indicators */
+        .focus-notch {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            background-color: rgba(255,255,255,0.1);
+            height: 20%;
+        }
+    </style>
+</head>
+<!-- h-dvh ensures full height without scrollbars on mobile -->
+<body class="bg-gray-50 dark:bg-amoled text-gray-900 dark:text-gray-200 h-dvh w-screen flex flex-col overflow-hidden transition-colors duration-300 select-none">
+
+    <!-- 1. TOP HUD (Added pt-safe for Notch) -->
+    <nav class="flex-shrink-0 flex justify-between items-center px-6 pt-safe pb-2 text-xs font-mono opacity-60 z-20 bg-gradient-to-b from-black/50 to-transparent">
+        <div id="clock">12:00</div>
+        <div id="file-name" class="truncate max-w-[150px] hidden sm:block">No File</div>
+        <div id="battery" class="flex items-center gap-2">
+            <span>--%</span>
+            <i class="fas fa-battery-half"></i>
+        </div>
+    </nav>
+
+    <!-- 2. MAIN READER AREA (Flex Grow to fill available space) -->
+    <main class="flex-grow flex flex-col items-center justify-center relative w-full overflow-hidden">
+        
+        <!-- Focus Guides (Vertical Lines) -->
+        <div class="absolute inset-0 pointer-events-none">
+            <div class="focus-notch top-0"></div>
+            <div class="focus-notch bottom-0"></div>
+        </div>
+
+        <!-- The Word Display -->
+        <div id="reader-container" class="relative w-full max-w-4xl h-48 flex items-center justify-center font-mono">
+            
+            <!-- Empty State / Drop Zone -->
+            <label for="file-upload" id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center cursor-pointer active:scale-95 transition-transform z-10">
+                <div class="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center mb-4 shadow-lg ring-1 ring-gray-700">
+                    <i class="fas fa-book-open text-3xl opacity-70"></i>
+                </div>
+                <p class="text-sm md:text-base opacity-70 font-semibold">Tap to Open Book</p>
+                <p class="text-xs opacity-40 mt-1">PDF or EPUB</p>
+            </label>
+            
+            <!-- Active Word Rendering -->
+            <div id="word-stage" class="relative w-full text-center hidden pointer-events-none">
+                <span id="text-left" class="opacity-60 inline-block text-right w-[49%] pr-[2px] text-2xl md:text-5xl"></span>
+                <span id="text-focus" class="text-red-500 font-bold inline-block text-center w-auto text-3xl md:text-6xl scale-110"></span>
+                <span id="text-right" class="opacity-60 inline-block text-left w-[49%] pl-[2px] text-2xl md:text-5xl"></span>
+            </div>
+        </div>
+
+        <!-- WPM Floating Label -->
+        <div id="wpm-indicator" class="mt-8 text-xs font-mono text-blue-500 bg-blue-500/10 px-3 py-1 rounded-full opacity-0 transition-opacity duration-300">
+            300 WPM
+        </div>
+
+    </main>
+
+    <!-- 3. BOTTOM CONTROLS (Fixed height, safe padding) -->
+    <footer class="flex-shrink-0 w-full bg-white dark:bg-amoled-surface border-t border-gray-200 dark:border-amoled-border z-30 shadow-[0_-5px_15px_rgba(0,0,0,0.3)] pb-safe">
+        
+        <!-- Progress Bar (Clickable) -->
+        <div class="w-full h-2 bg-gray-200 dark:bg-gray-800 cursor-pointer group" id="timeline-container">
+            <div id="progress-fill" class="h-full bg-blue-600 w-0 transition-all duration-100 relative">
+                <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow hidden group-hover:block"></div>
+            </div>
+        </div>
+
+        <!-- Control Grid -->
+        <div class="px-4 py-3 md:py-6 max-w-2xl mx-auto flex flex-col gap-4">
+            
+            <!-- Info Row -->
+            <div class="flex justify-between items-center text-[10px] uppercase tracking-wider opacity-50 font-mono">
+                <span id="chapter-name" class="truncate max-w-[150px]">Start</span>
+                <span class="flex gap-1">
+                    <span id="current-idx">0</span>/<span id="total-words">0</span>
+                </span>
+            </div>
+
+            <!-- Main Buttons -->
+            <div class="flex items-center justify-between">
+                
+                <!-- Speed / Theme (Left) -->
+                <div class="flex items-center gap-2">
+                    <button onclick="themeMgr.toggle()" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <!-- Hidden File Input -->
+                    <input type="file" id="file-upload" class="hidden" accept=".pdf,.epub">
+                </div>
+
+                <!-- Playback (Center) -->
+                <div class="flex items-center gap-4 md:gap-8">
+                    <button onclick="engine.jump(-10)" class="p-3 text-gray-400 hover:text-white active:scale-90 transition">
+                        <i class="fas fa-rotate-left"></i>
+                    </button>
+                    
+                    <button id="play-pause-btn" onclick="engine.toggle()" class="w-16 h-16 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-900/50 active:scale-95 transition-transform">
+                        <i class="fas fa-play ml-1 text-2xl"></i>
+                    </button>
+                    
+                    <button onclick="engine.jump(10)" class="p-3 text-gray-400 hover:text-white active:scale-90 transition">
+                        <i class="fas fa-rotate-right"></i>
+                    </button>
+                </div>
+
+                <!-- Speed Slider Trigger (Right) -->
+                <div class="relative flex items-center justify-end w-10">
+                     <button id="speed-btn" class="text-xs font-bold text-gray-400 border border-gray-700 rounded px-2 py-1">
+                        <span id="speed-val">300</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Speed Slider (Inline for Mobile) -->
+            <div class="flex items-center gap-3 px-2 pt-1">
+                <i class="fas fa-turtle text-xs text-gray-600"></i>
+                <input type="range" id="speed-slider" min="100" max="1000" step="10" value="300" class="flex-grow h-8">
+                <i class="fas fa-rabbit text-xs text-gray-600"></i>
+            </div>
+            
+        </div>
+    </footer>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loader" class="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center hidden backdrop-blur-sm">
+        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <div id="loader-text" class="text-white font-mono text-sm animate-pulse">Loading Book...</div>
+    </div>
+
+    <!-- LOGIC SCRIPT -->
+    <script>
+        // --- WORKER FOR PERFORMANCE (Embedded) ---
+        const workerCode = `
+            self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+            self.onmessage = (e) => {
+                if(e.data.type === 'PARSE') {
+                    const words = process(e.data.text);
+                    self.postMessage({ type: 'DONE', data: words });
+                }
+            };
+            function process(text) {
+                // Split by spaces/newlines but keep logic clean
+                return text.split(/[\\s\\n\\r]+/).filter(w => w.trim().length > 0);
+            }
+        `;
+        const workerBlob = new Blob([workerCode], {type:'application/javascript'});
+        const worker = new Worker(URL.createObjectURL(workerBlob));
+
+        // --- CORE ENGINE ---
+        class RSVPEngine {
+            constructor() {
+                this.words = [];
+                this.idx = 0;
+                this.isPlaying = false;
+                this.wpm = 300;
+                this.loopId = null;
+                this.lastTime = 0;
+                this.accum = 0;
+                
+                this.els = {
+                    left: document.getElementById('text-left'),
+                    focus: document.getElementById('text-focus'),
+                    right: document.getElementById('text-right'),
+                    stage: document.getElementById('word-stage'),
+                    empty: document.getElementById('empty-state'),
+                    btn: document.getElementById('play-pause-btn')
+                };
+            }
+
+            load(wordList) {
+                this.pause();
+                this.words = wordList;
+                this.idx = 0;
+                this.els.empty.classList.add('hidden');
+                this.els.stage.classList.remove('hidden');
+                ui.updateTotal(this.words.length);
+                this.render();
+            }
+
+            toggle() { this.isPlaying ? this.pause() : this.play(); }
+
+            play() {
+                if(!this.words.length) return;
+                this.isPlaying = true;
+                this.els.btn.innerHTML = '<i class="fas fa-pause text-2xl"></i>';
+                this.lastTime = performance.now();
+                this.loopId = requestAnimationFrame(t => this.loop(t));
+            }
+
+            pause() {
+                this.isPlaying = false;
+                this.els.btn.innerHTML = '<i class="fas fa-play ml-1 text-2xl"></i>';
+                cancelAnimationFrame(this.loopId);
+            }
+
+            jump(n) {
+                this.idx = Math.min(Math.max(0, this.idx + n), this.words.length-1);
+                this.render();
+                if(this.isPlaying) {
+                    this.pause();
+                    setTimeout(() => this.play(), 200); // Visual feedback pause
+                }
+            }
+
+            loop(timestamp) {
+                if(!this.isPlaying) return;
+                const dt = timestamp - this.lastTime;
+                this.lastTime = timestamp;
+
+                const baseDelay = 60000 / this.wpm;
+                let mult = 1;
+                
+                // Smart Punctuation Delays
+                const w = this.words[this.idx] || "";
+                if(/[.!?]$/.test(w)) mult = 2.2;
+                else if(/[,;:]$/.test(w)) mult = 1.5;
+                else if(w.length > 10) mult = 1.3;
+
+                this.accum += dt;
+
+                if(this.accum >= baseDelay * mult) {
+                    this.accum = 0;
+                    if(this.idx < this.words.length - 1) {
+                        this.idx++;
+                        this.render();
+                        // Update UI every 10 words (Performance)
+                        if(this.idx % 10 === 0) ui.updateProgress(this.idx);
+                    } else {
+                        this.pause();
+                    }
+                }
+                this.loopId = requestAnimationFrame(t => this.loop(t));
+            }
+
+            render() {
+                const word = this.words[this.idx];
+                if(!word) return;
+
+                // ORP Logic (Optical Recognition Point)
+                // Center slightly left of middle for optimal reading
+                let pivot = Math.ceil((word.length - 1) * 0.35);
+                if (word.length === 1) pivot = 0;
+
+                this.els.left.innerText = word.substring(0, pivot);
+                this.els.focus.innerText = word.substring(pivot, pivot + 1);
+                this.els.right.innerText = word.substring(pivot + 1);
+            }
+        }
+
+        // --- UI MANAGER ---
+        const ui = {
+            progBar: document.getElementById('progress-fill'),
+            curTxt: document.getElementById('current-idx'),
+            totTxt: document.getElementById('total-words'),
+            loader: document.getElementById('loader'),
+
+            updateProgress(n) {
+                this.curTxt.innerText = n;
+                const pct = (n / engine.words.length) * 100;
+                this.progBar.style.width = `${pct}%`;
+            },
+            updateTotal(n) {
+                this.totTxt.innerText = n;
+            },
+            loading(show, msg) {
+                this.loader.classList.toggle('hidden', !show);
+                if(msg) document.getElementById('loader-text').innerText = msg;
+            }
+        };
+
+        const themeMgr = {
+            toggle: () => document.documentElement.classList.toggle('dark')
+        };
+
+        // --- INIT ---
+        document.documentElement.classList.add('dark');
+        const engine = new RSVPEngine();
+        
+        // --- FILE INPUT HANDLER ---
+        document.getElementById('file-upload').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+
+            document.getElementById('file-name').innerText = file.name;
+            ui.loading(true, "Extracting Text...");
+
+            try {
+                let text = "";
+                if(file.name.endsWith('.pdf')) {
+                    const buf = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(buf).promise;
+                    for(let i=1; i<=pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        text += content.items.map(s => s.str).join(" ") + " ";
+                    }
+                } else if(file.name.endsWith('.epub')) {
+                    const zip = await JSZip.loadAsync(file);
+                    // Simplified EPUB logic for brevity
+                    const files = Object.keys(zip.files).filter(n => n.endsWith('.html') || n.endsWith('.xhtml'));
+                    for(const f of files) {
+                        const str = await zip.file(f).async('string');
+                        const doc = new DOMParser().parseFromString(str, 'text/html');
+                        text += doc.body.textContent + " ";
+                    }
+                }
+
+                ui.loading(true, "Analyzing...");
+                worker.postMessage({ type: 'PARSE', text: text });
+
+            } catch(err) {
+                alert("File Error: " + err.message);
+                ui.loading(false);
+            }
+        });
+
+        worker.onmessage = (e) => {
+            if(e.data.type === 'DONE') {
+                engine.load(e.data.data);
+                ui.loading(false);
+            }
+        };
+
+        // --- EVENTS ---
+        const slider = document.getElementById('speed-slider');
+        const speedVal = document.getElementById('speed-val');
+        const wpmInd = document.getElementById('wpm-indicator');
+        
+        slider.addEventListener('input', (e) => {
+            engine.wpm = e.target.value;
+            speedVal.innerText = e.target.value;
+            wpmInd.innerText = e.target.value + " WPM";
+            wpmInd.style.opacity = 1;
+            clearTimeout(window.wpmTimer);
+            window.wpmTimer = setTimeout(() => wpmInd.style.opacity = 0, 1500);
+        });
+
+        document.getElementById('timeline-container').addEventListener('click', (e) => {
+            if(!engine.words.length) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            engine.jump(Math.floor(pct * engine.words.length) - engine.idx);
+        });
+
+        // Update Clock/Battery
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        }, 1000);
+        
+        if(navigator.getBattery) {
+            navigator.getBattery().then(b => {
+                document.querySelector('#battery span').innerText = Math.round(b.level*100) + "%";
+            });
+        }
+    </script>
+</body>
+</html>
+
