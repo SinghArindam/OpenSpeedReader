@@ -1,21 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OpenSpeedReader</title>
-    
+
     <!-- Dependencies -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- PDF & EPUB Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        
+
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -42,7 +43,8 @@
             display: flex;
             align-items: center;
             height: 120px;
-            font-family: 'Courier New', Courier, monospace; /* Monospace is critical for fixed width calculation */
+            font-family: 'Courier New', Courier, monospace;
+            /* Monospace is critical for fixed width calculation */
             font-size: 3rem;
             white-space: pre;
             overflow: hidden;
@@ -50,7 +52,8 @@
         }
 
         /* The Focus Marker (Vertical Lines) */
-        .focus-indicator-top, .focus-indicator-bottom {
+        .focus-indicator-top,
+        .focus-indicator-bottom {
             position: absolute;
             left: 50%;
             transform: translateX(-50%);
@@ -58,19 +61,30 @@
             background-color: rgba(100, 100, 100, 0.3);
             height: 15px;
         }
-        .focus-indicator-top { top: 0; }
-        .focus-indicator-bottom { bottom: 0; }
 
-        .word-part { display: inline-block; }
-        
-        .word-left { 
-            text-align: right; 
-            width: 50%; /* Pushes text to end at center */
-            padding-right: 1px; /* Slight offset for optics */
+        .focus-indicator-top {
+            top: 0;
         }
-        
+
+        .focus-indicator-bottom {
+            bottom: 0;
+        }
+
+        .word-part {
+            display: inline-block;
+        }
+
+        .word-left {
+            text-align: right;
+            width: 50%;
+            /* Pushes text to end at center */
+            padding-right: 1px;
+            /* Slight offset for optics */
+        }
+
         .word-focus {
-            color: #ef4444; /* Tailwind red-500 */
+            color: #ef4444;
+            /* Tailwind red-500 */
             font-weight: 700;
             width: auto;
             position: absolute;
@@ -79,23 +93,33 @@
             z-index: 10;
         }
 
-        .word-right { 
-            text-align: left; 
-            width: 50%; /* Starts text from center */
+        .word-right {
+            text-align: left;
+            width: 50%;
+            /* Starts text from center */
             position: absolute;
             left: 50%;
-            padding-left: 0.6em; /* Offset by approx width of focus char */
+            padding-left: 0.6em;
+            /* Offset by approx width of focus char */
         }
 
         /* UI Transitions */
-        .ui-panel { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s; }
-        .hidden-panel { transform: translateY(20px); opacity: 0; pointer-events: none; }
-        
+        .ui-panel {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+        }
+
+        .hidden-panel {
+            transform: translateY(20px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
         /* Slider Styling */
         input[type=range] {
             -webkit-appearance: none;
             background: transparent;
         }
+
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
             height: 16px;
@@ -104,6 +128,7 @@
             background: #3b82f6;
             margin-top: -6px;
         }
+
         input[type=range]::-webkit-slider-runnable-track {
             width: 100%;
             height: 4px;
@@ -112,7 +137,9 @@
         }
     </style>
 </head>
-<body class="bg-white dark:bg-amoled text-gray-900 dark:text-gray-200 h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300">
+
+<body
+    class="bg-white dark:bg-amoled text-gray-900 dark:text-gray-200 h-screen w-screen flex flex-col overflow-hidden transition-colors duration-300">
 
     <!-- 1. HEADS UP DISPLAY (HUD) -->
     <nav class="flex justify-between items-center p-4 px-6 text-xs font-mono opacity-60 z-20">
@@ -126,36 +153,63 @@
 
     <!-- 2. MAIN READER STAGE -->
     <main class="flex-grow flex flex-col items-center justify-center relative w-full">
-        
+
         <!-- Focus Guides -->
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10 dark:opacity-20">
             <div class="w-px h-32 bg-gray-500"></div>
         </div>
 
         <!-- The Word -->
-        <div id="reader-container" class="relative w-full max-w-4xl h-40 flex items-center justify-center text-4xl md:text-6xl font-mono">
-            <div id="empty-state" class="absolute text-center opacity-50 text-sm md:text-base transition-opacity duration-300">
+        <div id="reader-container"
+            class="relative w-full max-w-4xl h-40 flex items-center justify-center text-4xl md:text-6xl font-mono">
+            <div id="empty-state"
+                class="absolute text-center opacity-50 text-sm md:text-base transition-opacity duration-300">
                 <i class="fas fa-book-open text-4xl mb-4 block"></i>
                 Drop PDF/EPUB or click Folder to open
             </div>
-            
+
             <!-- Actual Word Rendering -->
-            <div id="word-stage" class="relative w-full text-center hidden">
-                <!-- Using a sophisticated 3-part layout for perfect centering -->
-                <span id="text-left" class="opacity-80"></span><span id="text-focus" class="text-red-500 font-bold"></span><span id="text-right" class="opacity-80"></span>
+            <div id="word-stage" class="relative w-full h-40 hidden font-mono">
+
+                <!-- Context Words (Fixed Positions) -->
+                <span id="ctx-l2"
+                    class="absolute top-1/2 -translate-y-1/2 left-[5%] md:left-[15%] w-[10%] text-center text-gray-300 dark:text-gray-800 text-xl md:text-2xl hidden md:block select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
+                <span id="ctx-l1"
+                    class="absolute top-1/2 -translate-y-1/2 left-[15%] md:left-[28%] w-[15%] text-center text-gray-400 dark:text-gray-600 text-2xl md:text-3xl select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
+
+                <!-- Main Word (Strict Center Alignment) -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span id="text-left"
+                        class="absolute right-[50%] mr-[0.6ch] text-right whitespace-nowrap overflow-visible text-4xl md:text-6xl opacity-90 dark:text-gray-200"></span>
+
+                    <!-- Focus Character: Center -->
+                    <span id="text-focus"
+                        class="absolute left-1/2 -translate-x-1/2 text-center w-[1.2ch] font-bold text-red-500 text-4xl md:text-6xl z-10 scale-110"></span>
+
+                    <span id="text-right"
+                        class="absolute left-[50%] ml-[0.6ch] text-left whitespace-nowrap overflow-visible text-4xl md:text-6xl opacity-90 dark:text-gray-200"></span>
+                </div>
+
+                <!-- Context Words (Right) -->
+                <span id="ctx-r1"
+                    class="absolute top-1/2 -translate-y-1/2 right-[15%] md:right-[28%] w-[15%] text-center text-gray-400 dark:text-gray-600 text-2xl md:text-3xl select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
+                <span id="ctx-r2"
+                    class="absolute top-1/2 -translate-y-1/2 right-[5%] md:right-[15%] w-[10%] text-center text-gray-300 dark:text-gray-800 text-xl md:text-2xl hidden md:block select-none overflow-hidden whitespace-nowrap text-ellipsis"></span>
             </div>
         </div>
 
         <!-- Stats Overlay (WPM) -->
-        <div id="wpm-indicator" class="absolute bottom-1/4 text-xs font-mono text-blue-500 opacity-0 transition-opacity duration-300">
+        <div id="wpm-indicator"
+            class="absolute bottom-1/4 text-xs font-mono text-blue-500 opacity-0 transition-opacity duration-300">
             300 WPM
         </div>
 
     </main>
 
     <!-- 3. CONTROL PANEL -->
-    <footer class="w-full bg-gray-100 dark:bg-amoled-surface border-t border-gray-200 dark:border-amoled-border z-30 transition-all duration-300 pb-safe">
-        
+    <footer
+        class="w-full bg-gray-100 dark:bg-amoled-surface border-t border-gray-200 dark:border-amoled-border z-30 transition-all duration-300 pb-safe">
+
         <!-- Progress Info -->
         <div class="w-full h-1 bg-gray-300 dark:bg-gray-800 relative group cursor-pointer" id="timeline-container">
             <div id="progress-fill" class="h-full bg-blue-500 w-0 transition-all duration-100"></div>
@@ -163,7 +217,7 @@
         </div>
 
         <div class="p-4 md:p-6 max-w-4xl mx-auto">
-            
+
             <div class="flex justify-between items-end mb-4 text-xs font-mono opacity-60">
                 <span id="chapter-name">Chapter 1</span>
                 <span><span id="current-idx">0</span> / <span id="total-words">0</span></span>
@@ -171,29 +225,33 @@
 
             <!-- Controls Grid -->
             <div class="flex items-center justify-between gap-4">
-                
+
                 <!-- Left: File & Settings -->
                 <div class="flex gap-4">
                     <label class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 cursor-pointer transition">
                         <input type="file" id="file-upload" class="hidden" accept=".pdf,.epub">
                         <i class="fas fa-folder-open text-lg"></i>
                     </label>
-                    <button onclick="themeMgr.toggle()" class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition">
+                    <button onclick="themeMgr.toggle()"
+                        class="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition">
                         <i class="fas fa-adjust text-lg"></i>
                     </button>
                 </div>
 
                 <!-- Center: Playback -->
                 <div class="flex items-center gap-6">
-                    <button onclick="engine.jump(-10)" class="text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
+                    <button onclick="engine.jump(-10)"
+                        class="text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
                         <i class="fas fa-backward"></i>
                     </button>
-                    
-                    <button id="play-pause-btn" onclick="engine.toggle()" class="w-14 h-14 bg-white dark:bg-gray-200 text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition">
+
+                    <button id="play-pause-btn" onclick="engine.toggle()"
+                        class="w-14 h-14 bg-white dark:bg-gray-200 text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition">
                         <i class="fas fa-play ml-1 text-xl"></i>
                     </button>
-                    
-                    <button onclick="engine.jump(10)" class="text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
+
+                    <button onclick="engine.jump(10)"
+                        class="text-gray-500 hover:text-gray-900 dark:hover:text-white transition">
                         <i class="fas fa-forward"></i>
                     </button>
                 </div>
@@ -201,7 +259,8 @@
                 <!-- Right: Speed -->
                 <div class="flex items-center gap-2 group relative">
                     <i class="fas fa-tachometer-alt text-gray-500"></i>
-                    <div class="absolute bottom-12 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden group-hover:block w-48">
+                    <div
+                        class="absolute bottom-12 right-0 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-xl border dark:border-gray-700 hidden group-hover:block w-48">
                         <div class="flex justify-between mb-2 text-xs">
                             <span>Speed</span>
                             <span id="speed-val">300</span>
@@ -215,7 +274,8 @@
     </footer>
 
     <!-- LOADING OVERLAY -->
-    <div id="loader" class="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center hidden backdrop-blur-sm">
+    <div id="loader"
+        class="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center hidden backdrop-blur-sm">
         <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
         <div id="loader-text" class="text-white font-mono text-sm animate-pulse">Processing...</div>
     </div>
@@ -273,7 +333,7 @@
                 this.wpm = 300;
                 this.lastFrameTime = 0;
                 this.delayAccumulator = 0;
-                
+
                 // Punctuation Delays (Multipliers)
                 this.delays = {
                     base: 1,
@@ -286,6 +346,13 @@
                     left: document.getElementById('text-left'),
                     focus: document.getElementById('text-focus'),
                     right: document.getElementById('text-right'),
+
+                    // Context
+                    ctxL2: document.getElementById('ctx-l2'),
+                    ctxL1: document.getElementById('ctx-l1'),
+                    ctxR1: document.getElementById('ctx-r1'),
+                    ctxR2: document.getElementById('ctx-r2'),
+
                     stage: document.getElementById('word-stage'),
                     empty: document.getElementById('empty-state'),
                     btn: document.getElementById('play-pause-btn')
@@ -333,7 +400,7 @@
                 this.wpm = parseInt(newWpm);
                 document.getElementById('wpm-indicator').innerText = `${this.wpm} WPM`;
                 document.getElementById('speed-val').innerText = this.wpm;
-                
+
                 // Show floating indicator
                 const ind = document.getElementById('wpm-indicator');
                 ind.style.opacity = '1';
@@ -355,7 +422,7 @@
                 // Smart Delay Logic based on *current* word (the one user is reading)
                 let multiplier = 1;
                 const currentWord = this.words[this.index];
-                
+
                 if (currentWord) {
                     const lastChar = currentWord.slice(-1);
                     if ('.!?'.includes(lastChar)) multiplier = this.delays.period;
@@ -369,7 +436,7 @@
 
                 if (this.delayAccumulator >= targetDelay) {
                     this.delayAccumulator = 0; // Reset or subtract targetDelay to catch up (reset is smoother for eyes)
-                    
+
                     if (this.index < this.words.length - 1) {
                         this.index++;
                         this.render();
@@ -388,7 +455,7 @@
                 // ORP (Optical Recognition Point) Logic
                 // We want the focus point roughly 35-40% into the word.
                 let pivot = Math.ceil((word.length - 1) * 0.35);
-                
+
                 // Special handling for very short words
                 if (word.length === 1) pivot = 0;
 
@@ -399,6 +466,15 @@
                 this.ui.left.innerText = start;
                 this.ui.focus.innerText = middle;
                 this.ui.right.innerText = end;
+
+                // Render Context Words
+                // Helper to safely get word at offset
+                const getW = (off) => this.words[this.index + off] || "";
+
+                this.ui.ctxL2.innerText = getW(-2);
+                this.ui.ctxL1.innerText = getW(-1);
+                this.ui.ctxR1.innerText = getW(1);
+                this.ui.ctxR2.innerText = getW(2);
 
                 // Update Progress UI occasionally (every 10 words to save DOM calls) or if paused
                 if (this.index % 10 === 0 || !this.isPlaying) {
@@ -437,7 +513,7 @@
                 this.els.totalWords.innerText = total;
             },
 
-            setLoading(isLoading, text="Processing...") {
+            setLoading(isLoading, text = "Processing...") {
                 const loader = this.els.loader;
                 document.getElementById('loader-text').innerText = text;
                 if (isLoading) loader.classList.remove('hidden');
@@ -480,10 +556,10 @@
 
             uiMgr.els.fileName.innerText = file.name;
             uiMgr.setLoading(true, "Reading File...");
-            
+
             try {
                 let text = "";
-                
+
                 if (file.name.toLowerCase().endsWith('.pdf')) {
                     text = await parsePDF(file);
                 } else if (file.name.toLowerCase().endsWith('.epub')) {
@@ -495,7 +571,7 @@
                 }
 
                 uiMgr.setLoading(true, "Segmenting Words...");
-                
+
                 // Send to worker for processing
                 processingWorker.postMessage({ type: 'PARSE_TEXT', payload: text });
 
@@ -520,7 +596,7 @@
             const buffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument(buffer).promise;
             let fullText = "";
-            
+
             // Iterate pages
             for (let i = 1; i <= pdf.numPages; i++) {
                 uiMgr.setLoading(true, `Parsing PDF Page ${i}/${pdf.numPages}`);
@@ -540,11 +616,11 @@
             const container = await zip.file("META-INF/container.xml").async("text");
             const containerDoc = parser.parseFromString(container, "text/xml");
             const rootPath = containerDoc.getElementsByTagName("rootfile")[0].getAttribute("full-path");
-            
+
             // 2. Read OPF
             const opf = await zip.file(rootPath).async("text");
             const opfDoc = parser.parseFromString(opf, "text/xml");
-            
+
             // 3. Get Spine
             const manifest = {};
             Array.from(opfDoc.getElementsByTagName("item")).forEach(item => {
@@ -560,7 +636,7 @@
             for (const item of spine) {
                 count++;
                 uiMgr.setLoading(true, `Parsing EPUB Section ${count}/${spine.length}`);
-                
+
                 const id = item.getAttribute("idref");
                 const href = manifest[id];
                 if (href) {
@@ -584,7 +660,7 @@
             const x = e.clientX - rect.left;
             const pct = x / rect.width;
             const newIndex = Math.floor(pct * engine.words.length);
-            
+
             engine.index = newIndex;
             engine.render();
             engine.pause();
@@ -612,5 +688,5 @@
 
     </script>
 </body>
-</html>
 
+</html>
