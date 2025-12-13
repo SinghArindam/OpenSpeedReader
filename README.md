@@ -5,9 +5,11 @@ OpenSpeedReader is a privacy-focused, browser-based speed reader leveraging **Ra
 ## Screenshots
 
 ![Dark Mode Mobile](assets/dark_mode_mobile.jpg)
+
 ![Light Mode Mobile](assets/light_mode_mobile.jpg)
 
 ![Dark Mode Desktop](assets/dark_mode_desktop.png)
+
 ![Light Mode Desktop](assets/light_mode_desktop.png)
 
 ## Features
