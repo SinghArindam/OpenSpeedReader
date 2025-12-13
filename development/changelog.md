@@ -1,3 +1,9 @@
+## 2025-12-13 18:41 IST (Session Summary)
+### Changes
+- Created comprehensive `README.md` with features, usage, and keyboard shortcuts.
+- Updated documentation links to point to the correct `development/` folder.
+- Removed redundant root-level changelog files.
+
 ## 2025-12-13 18:23 IST (Session Summary)
 ### Changes
 - Fixed mobile UI bottom cut-off issue by adopting Dynamic Viewport Height (`100dvh`).

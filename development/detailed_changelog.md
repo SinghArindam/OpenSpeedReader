@@ -1,3 +1,18 @@
+## 2025-12-13 18:41 (Detailed Session Changes)
+
+### Documentation & Project Structure
+- **Why**: The project lacked a proper `README.md`, and the changelog files were fragmented (some in root, some in `development/`).
+- **Implementation**:
+    - Rewrote `README.md` to include a full feature list, usage guide, and shortcuts table.
+    - Updated links in `README.md` to reference `development/changelog.md` and `development/detailed_changelog.md`.
+    - Deleted `CHANGELOG.md` and `CHANGELOG_DETAILED.md` from the root directory to avoid duplication.
+- **Code Snippets**:
+  ```markdown
+  # OpenSpeedReader
+  ...
+  - [Changelog](./development/changelog.md)
+  ```
+
 ## 2025-12-13 18:23 (Detailed Session Changes)
 
 ### Mobile Viewport & Safe Area Fixes
